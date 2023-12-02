@@ -24,9 +24,10 @@ int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
 
   Polynomial<double> a;
-  a[-1] = 1;
+  a[3] = 1;
 
   Polynomial<double> b;
+  b[2] = 3;
 
   Polynomial<double> prod = a * b;
   const auto [quot, rem] = div_mod(a, b);
@@ -39,6 +40,7 @@ int main(int argc, char** argv) {
   std::cout << "rem = " << ToString(rem) << std::endl;
   std::cout << "qb + r = " << ToString((quot * b) + rem) << std::endl;
   std::cout << "p(" << x << ") = " << p_x << std::endl;
+  std::cout << "b(a) = " << ToString(b(a)) << std::endl;
 
   return 0;
 }

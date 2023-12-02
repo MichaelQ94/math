@@ -1,6 +1,7 @@
 #ifndef HOI_MATH_ALGEBRA_POLYNOMIAL_H
 #define HOI_MATH_ALGEBRA_POLYNOMIAL_H
 
+#include <concepts>
 #include <iterator>
 #include <map>
 #include <type_traits>
@@ -31,14 +32,20 @@ class Polynomial {
   Polynomial() = default;
   Polynomial(const Polynomial&) = default;
   Polynomial(Polynomial&&) = default;
-  Polynomial& operator=(const Polynomial&) = default;
-  Polynomial& operator=(Polynomial&&) = default;
 
   // Allows implicit creation of constant polynomials `p(x) = c`.
   Polynomial(const S& c);
+  Polynomial(S&& c);
 
   // Create a polynomial representing `p(x) = a*(x^n)`.
-  explicit Polynomial(int n, const S& a);
+  Polynomial(int n, const S& a);
+  Polynomial(int n, S&& a);
+
+  bool operator==(const Polynomial&) const = default;
+  bool operator!=(const Polynomial&) const = default;
+
+  Polynomial& operator=(const Polynomial&) = default;
+  Polynomial& operator=(Polynomial&&) = default;
 
   // Accesses the coefficient of the degree `deg` term (`deg` must be positive). The
   // returned CoeffRef is implicitly convertible to `const S&` if value inspection is
@@ -62,7 +69,7 @@ class Polynomial {
 
   // Substitutes the given value of `x` into the encapsulated polynomial expression
   // and computes the result. `X` must be constructible from `S`.
-  template<typename X>
+  template<typename X> requires std::convertible_to<S, X>
   X operator()(const X& x) const;
 
   // Arithmetic operators.
@@ -93,6 +100,7 @@ class Polynomial {
    public:
     // Assign/reassign the referenced coefficient.
     CoeffRef& operator=(const S& s);
+    CoeffRef& operator=(S&& s);
 
     // Allow implicit conversion to `const S&`, so that coefficients can be
     // inspected using:
@@ -105,10 +113,14 @@ class Polynomial {
    private:
     friend class Polynomial;
 
-    CoeffRef(const int deg, Polynomial& host_polynomial);
+    CoeffRef(const int deg, Polynomial& host);
+
+    // Used to implement assignment operators.
+    template<typename T> requires std::same_as<std::remove_cvref_t<T>, std::remove_cvref_t<S>>
+    CoeffRef& assign_coeff(T&& t);  // T&& is a forwarding reference
 
     const int deg_;
-    Polynomial& host_polynomial_;
+    Polynomial& host_;
   };
 
   // Provides read access to the non-zero monomial terms in a Polynomial.
@@ -219,6 +231,7 @@ std::pair<Polynomial<S>, Polynomial<S>> div_mod(const Polynomial<S>& a, const Po
 
   std::pair<Polynomial<S>, Polynomial<S>> result;
   auto& [quot, rem] = result;
+  rem = a;
 
   for (int deg_rem = deg(rem); deg_rem >= deg_b; deg_rem = deg(rem)) {
     const int deg_diff = deg_rem - deg_b;
@@ -235,9 +248,19 @@ template<typename S>
 Polynomial<S>::Polynomial(const S& c) : Polynomial(0, c) {}
 
 template<typename S>
+Polynomial<S>::Polynomial(S&& c) : Polynomial(0, std::move(c)) {}
+
+template<typename S>
 Polynomial<S>::Polynomial(int n, const S& a) {
   if (a != Arithmetic<S>::zero()) {
     (*this)[n] = a;
+  }
+}
+
+template<typename S>
+Polynomial<S>::Polynomial(int n, S&& a) {
+  if (a != Arithmetic<S>::zero()) {
+    (*this)[n] = std::move(a);
   }
 }
 
@@ -269,8 +292,9 @@ Polynomial<S>::TermsDesc Polynomial<S>::terms_desc() const {
   return TermsDesc(deg_to_coeff_.rbegin(), deg_to_coeff_.rend());
 }
 
+
 template<typename S>
-template<typename X>
+template<typename X> requires std::convertible_to<S, X>
 X Polynomial<S>::operator()(const X& x) const {
   int n = 0;
   X x_nth_power = Arithmetic<X>::one();
@@ -331,27 +355,38 @@ Polynomial<S> operator%(const Polynomial<S>& lhs, const Polynomial<S>& rhs) {
 }
 
 template<typename S>
-Polynomial<S>::CoeffRef::CoeffRef(const int deg, Polynomial<S>& host_polynomial)
-    : deg_(deg), host_polynomial_(host_polynomial) {}
+Polynomial<S>::CoeffRef::CoeffRef(const int deg, Polynomial<S>& host)
+    : deg_(deg), host_(host) {}
 
 template<typename S>
 Polynomial<S>::CoeffRef& Polynomial<S>::CoeffRef::operator=(const S& s) {
+  return assign_coeff(s);
+}
+
+template<typename S>
+Polynomial<S>::CoeffRef& Polynomial<S>::CoeffRef::operator=(S&& s) {
+  return assign_coeff(s);
+}
+
+template<typename S>
+Polynomial<S>::CoeffRef::operator Polynomial<S>::CoeffRef::const_ref() const {
+  return static_cast<const Polynomial<S>&>(host_)[deg_];
+}
+
+template<typename S>
+template<typename T> requires std::same_as<std::remove_cvref_t<T>, std::remove_cvref_t<S>>
+Polynomial<S>::CoeffRef& Polynomial<S>::CoeffRef::assign_coeff(T&& t) {
   // By ensuring that the host Polynomial's deg_to_coeff_ map contains only
   // entries describing non-zero coefficients, we can compute the degree of
   // the polynomial in O(1) time by simply extracting the highest key.
   // Exposing direct references of type `S&` to map values would not allow us
   // to do this.
-  if (s == Arithmetic<S>::zero()) {
-    host_polynomial_.deg_to_coeff_.erase(deg_);
+  if (t == Arithmetic<S>::zero()) {
+    host_.deg_to_coeff_.erase(deg_);
   } else {
-    host_polynomial_.deg_to_coeff_[deg_] = s;
+    host_.deg_to_coeff_.insert_or_assign(deg_, std::forward<T>(t));
   }
   return *this;
-}
-
-template<typename S>
-Polynomial<S>::CoeffRef::operator Polynomial<S>::CoeffRef::const_ref() const {
-  return static_cast<const Polynomial<S>&>(host_polynomial_)[deg_];
 }
 
 }  // namespace hoi::algebra
