@@ -12,14 +12,14 @@ struct Arithmetic {
   // For an arithmetic type T, returns the additive identity satisfying:
   // `zero() + t == t == t + zero()`
   static const T& zero() {
-    static constexpr T ZERO(0);
+    static const T ZERO(0);
     return ZERO;
   }
 
   // For an arithmetic type T, returns the multiplicative identity satisfying:
   // `one() * t == t == t * one()`
   static const T& one() {
-    static constexpr T ONE(1);
+    static const T ONE(1);
     return ONE;
   }
 };
